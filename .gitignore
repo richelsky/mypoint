@@ -1,0 +1,50 @@
+# 中间产物，不入库
+ge_data.json
+ge_ovital.json
+ge_page_data.json
+ge_structure.json
+
+# srhgis 抓下来的原始数据（几百 MB）
+srhgis_data/
+leaflet_tmp/
+*.log
+
+# 截图和调试文件
+*.png
+*.jpg
+*.jpeg
+preview_*.jpg
+chk_*.jpg
+rb_*.jpg
+rb_*.png
+culture_preview*.png
+ethnic_preview*.png
+roadbook*.png
+tdt_check.jpg
+osm_check.jpg
+gv_check.jpg
+gv_*.bin
+jl1_nokey.webp
+tile_*.png
+test_export.kml
+t2.kml
+
+# 只保留成品 HTML
+srhgis_*.html
+srhgis_*.kml
+srhgis_*.kmz
+silkroad_all.*
+tile_sample.png
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 临时脚本
+probe*.py
+patch*.py
+fix_prompt.py
+scan_ge.py
+prepare_ge.py
+test_export.py
