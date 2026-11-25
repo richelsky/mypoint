@@ -137,6 +137,11 @@ html,body{margin:0;height:100%;font:13px/1.5 "Microsoft YaHei",system-ui,sans-se
 #tip{position:absolute;left:calc(380px + (100vw - 380px)/2);top:50%;transform:translate(-50%,-50%);
   z-index:500;color:#7f97ad;font-size:13px;text-align:center;line-height:2;pointer-events:none}
 .leaflet-popup-content{font-size:12px;max-height:260px;overflow:auto}
+.ptl{background:rgba(15,23,32,.78)!important;border:0!important;color:#fff!important;
+  font-size:10px!important;line-height:1.4!important;padding:0 4px!important;
+  border-radius:2px!important;box-shadow:none!important;white-space:nowrap;
+  text-shadow:0 1px 2px #000}
+.ptl:before{display:none!important}
 </style></head><body>
 <div id="wrap">
   <div id="side">
@@ -554,6 +559,7 @@ var LAYS = {};      // 文件夹序号 -> 已经画在地图上的图层
 function buildLayer(items, depth){
   var g = L.layerGroup();
   var color = COLORS[(depth||0) % COLORS.length];
+  var labelled = 0;      // 标签太多会卡，控制个上限
   items.forEach(function(it){
     var nm=it[0], desc=it[1], t=it[2], c=it[3];
     if(!c) return;
@@ -563,6 +569,10 @@ function buildLayer(items, depth){
       var la=+p[1], ln=+p[0];
       if(isNaN(la)||isNaN(ln)) return;
       var m=L.circleMarker([la,ln],{radius:3.2,color:color,weight:1,fillColor:color,fillOpacity:.85});
+      if(nm && labelled < 800){
+        m.bindTooltip(nm, {permanent:true, direction:'right', offset:[5,0], className:'ptl'});
+        labelled++;
+      }
       var h='<b>'+esc(nm||'（无名）')+'</b>';
       if(desc) h+='<div style="color:#666;margin-top:3px">'+esc(desc)+'</div>';
       m.bindPopup(h);
@@ -572,7 +582,9 @@ function buildLayer(items, depth){
         var ll=seg.split(';').map(function(x){var q=x.split(',');return [+q[1],+q[0]];})
           .filter(function(p){return !isNaN(p[0])&&!isNaN(p[1]);});
         if(ll.length<2) return;
-        g.addLayer(L.polyline(ll,{color:color,weight:2,opacity:.9}));
+        var pl=L.polyline(ll,{color:color,weight:2,opacity:.9});
+        if(nm) pl.bindTooltip(nm, {sticky:true, className:'ptl'});
+        g.addLayer(pl);
       });
     } else {
       c.split('|').forEach(function(seg){
