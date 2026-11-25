@@ -147,9 +147,9 @@ html,body{margin:0;height:100%;font:13px/1.5 "Microsoft YaHei",system-ui,sans-se
       <button class="btn g" id="expandAll">展开</button>
       <button class="btn g" id="collapseAll">收起</button>
       <button class="btn" id="expAll">导出全部</button>
-      <button class="btn" id="impBtn" title="导入 KML / KMZ">导入</button>
+      <button class="btn" id="impBtn" title="导入 KML / KMZ / GPX">导入</button>
       <button class="btn g" id="clearAll" title="取消地图上所有显示">清空</button>
-      <input type="file" id="fileIn" accept=".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz" multiple style="display:none">
+      <input type="file" id="fileIn" accept=".kml,.kmz,.gpx,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz,application/gpx+xml" multiple style="display:none">
     </div>
     <div id="list"></div>
   </div>
@@ -353,9 +353,9 @@ var ITEMLAYS = {};
 var NAMES = {};        // 改过的名字，key = 路径#序号
 var DELETED = {};      // 删掉的记录
 
-function itemKey(n, i){
-  var it = n.items[i] || [];
-  return pathKey(n, i) + '#' + String(it[3] || '').slice(0, 40);
+/* 坐标当 key，跟树怎么建、第几层都没关系 */
+function geoKey(it){
+  return String((it && it[3]) || '').slice(0, 90);
 }
 
 function loadDeleted(){
@@ -372,10 +372,11 @@ function saveDeleted(){
 function pruneFolders(node){
   if(!node.kids) return;
   node.kids = node.kids.filter(function(k){
-    return !DELFOLDERS[folderName(k)] && !k.__imp;
+    if(k.__imp) return true;          // 导入的要留着
+    return !DELFOLDERS[folderName(k)];
   });
   node.kids.forEach(function(k){
-    if(k.__imp) return;
+    if(k.__imp) return;               // 但不往导入的里面递归
     pruneFolders(k);
   });
 }
@@ -388,12 +389,7 @@ function folderName(n){
 /* 启动时把删掉的剔出去 */
 function applyDeletes(node){
   if(node.items && node.items.length){
-    var keep = [];
-    node.items.forEach(function(it, i){
-      var k = pathKey(node, i) + '#' + String(it[3] || '').slice(0, 40);
-      if(!DELETED[k]) keep.push(it);
-    });
-    node.items = keep;
+    node.items = node.items.filter(function(it){ return !DELETED[geoKey(it)]; });
   }
   (node.kids || []).forEach(applyDeletes);
 }
@@ -404,8 +400,7 @@ function deleteItem(n, i){
   if(!it) return;
   var nm = it[0] || '（无名）';
   if(!confirm('删除「' + nm + '」？这条只是从页面里去掉，原始文件不动。')) return;
-  var k = itemKey(n, i);
-  DELETED[k] = 1;
+  DELETED[geoKey(it)] = 1;
   saveDeleted();
   node.items.splice(i, 1);
   recount(TREE);
@@ -463,8 +458,8 @@ function loadNames(){
 }
 
 function applyNames(node){
-  (node.items || []).forEach(function(it, i){
-    var k = pathKey(node, i);
+  (node.items || []).forEach(function(it){
+    var k = geoKey(it);
     if(NAMES[k] !== undefined) it[0] = NAMES[k];
   });
   (node.kids || []).forEach(applyNames);
@@ -476,12 +471,12 @@ function renameItem(n, i){
   var v = prompt('改成什么名字？（留空就是清除改名）', cur);
   if(v === null) return;
   v = v.trim();
-  var k = pathKey(n, i);
+  var k = geoKey(it);
   if(v){
     it[0] = v;
     NAMES[k] = v;
   } else {
-    it[0] = '';               // 清空就恢复成原样，这里简化处理
+    it[0] = '';
     delete NAMES[k];
   }
   saveNames();
@@ -861,6 +856,66 @@ function parseKML(text){
   return items;
 }
 
+/* 解析 GPX：wpt 是点，trk/trkseg 是轨迹（每段分开），rte 是路线 */
+function parseGPX(text){
+  var doc = new DOMParser().parseFromString(text, 'text/xml');
+  if(doc.getElementsByTagName('parsererror').length) throw new Error('GPX 格式有问题');
+  var items = [];
+
+  function nameOf(el){
+    for(var i = 0; i < el.children.length; i++){
+      if(el.children[i].localName === 'name') return (el.children[i].textContent || '').trim();
+    }
+    return '';
+  }
+
+  var wpts = doc.getElementsByTagName('wpt');
+  for(var i = 0; i < wpts.length; i++){
+    var w = wpts[i], la = w.getAttribute('lat'), ln = w.getAttribute('lon');
+    if(!la || !ln) continue;
+    var ds = '';
+    for(var j = 0; j < w.children.length; j++){
+      if(w.children[j].localName === 'desc'){ ds = (w.children[j].textContent || '').trim().slice(0,400); break; }
+    }
+    items.push({p:[], n:nameOf(w), d:ds, t:'P', c:ln + ',' + la});
+  }
+
+  var trks = doc.getElementsByTagName('trk');
+  for(var i = 0; i < trks.length; i++){
+    var tr = trks[i], nm = nameOf(tr), segs = [];
+    for(var j = 0; j < tr.children.length; j++){
+      var ch = tr.children[j];
+      if(ch.localName !== 'trkseg') continue;
+      var pts = [];
+      for(var k = 0; k < ch.children.length; k++){
+        var pt = ch.children[k];
+        if(pt.localName !== 'trkpt') continue;
+        var la2 = pt.getAttribute('lat'), ln2 = pt.getAttribute('lon');
+        if(la2 && ln2 && !isNaN(+la2) && !isNaN(+ln2)) pts.push(ln2 + ',' + la2);
+      }
+      if(pts.length) segs.push(pts.join(';'));
+    }
+    if(!segs.length) continue;
+    var total = segs.reduce(function(a, b){ return a + b.split(';').length; }, 0);
+    var tp = (segs.length === 1 && total === 1) ? 'P' : 'L';
+    items.push({p:[], n:nm, d:'', t:tp, c:segs.join('|')});
+  }
+
+  var rtes = doc.getElementsByTagName('rte');
+  for(var i = 0; i < rtes.length; i++){
+    var rt = rtes[i], pts = [];
+    for(var j = 0; j < rt.children.length; j++){
+      var rp = rt.children[j];
+      if(rp.localName !== 'rtept') continue;
+      var la3 = rp.getAttribute('lat'), ln3 = rp.getAttribute('lon');
+      if(la3 && ln3 && !isNaN(+la3) && !isNaN(+ln3)) pts.push(ln3 + ',' + la3);
+    }
+    if(pts.length) items.push({p:[], n:nameOf(rt), d:'', t: pts.length === 1 ? 'P' : 'L', c:pts.join(';')});
+  }
+
+  return items;
+}
+
 /* 把导入的数据挂到树上 */
 function applyImports(){
   if(!TREE) return;
@@ -920,11 +975,13 @@ async function importFiles(files){
     var f = files[i];
     try{
       var buf = await f.arrayBuffer();
-      var text = /\.kmz$/i.test(f.name) ? await unzipKML(buf) : new TextDecoder().decode(buf);
-      var items = parseKML(text);
+      var isKmz = /\.kmz$/i.test(f.name);
+      var isGpx = /\.gpx$/i.test(f.name);
+      var text = isKmz ? await unzipKML(buf) : new TextDecoder().decode(buf);
+      var items = isGpx ? parseGPX(text) : parseKML(text);
       if(!items.length){ alert(f.name + '：里面没有读到任何地标'); continue; }
       var id = 'imp_' + Date.now() + '_' + i;
-      var name = f.name.replace(/\.(kml|kmz)$/i, '');
+      var name = f.name.replace(/\.(kml|kmz|gpx)$/i, '');
       IMPORTS.push({id: id, name: name, items: items});
       await idbPut({id: id, name: name, items: items});
       console.log('导入', f.name, items.length, '个地标');
