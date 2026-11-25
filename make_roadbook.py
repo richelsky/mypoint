@@ -112,6 +112,10 @@ html,body{margin:0;height:100%;font:13px/1.5 "Microsoft YaHei",system-ui,sans-se
 .del{background:none;border:1px solid #5a3a3a;color:#e08a8a;font-size:10.5px;padding:1px 6px;
   border-radius:3px;cursor:pointer;white-space:nowrap;flex-shrink:0}
 .del:hover{background:#c0392b;color:#fff;border-color:#c0392b}
+.tg{display:flex;align-items:center;gap:3px;background:#243542;color:#9fb3c8;
+  padding:4px 7px;border-radius:4px;font-size:11.5px;cursor:pointer;user-select:none}
+.tg:hover{background:#2e4354;color:#fff}
+.tg input{margin:0;cursor:pointer;width:12px;height:12px}
 .dl{background:none;border:1px solid #4a3a3a;color:#b08a8a;font-size:10px;padding:0 5px;
   border-radius:3px;cursor:pointer;flex-shrink:0;line-height:15px;opacity:.55}
 .nd.it:hover .dl{opacity:1}
@@ -154,6 +158,7 @@ html,body{margin:0;height:100%;font:13px/1.5 "Microsoft YaHei",system-ui,sans-se
       <button class="btn" id="expAll">导出全部</button>
       <button class="btn" id="impBtn" title="导入 KML / KMZ / GPX">导入</button>
       <button class="btn g" id="clearAll" title="取消地图上所有显示">清空</button>
+      <label class="tg" title="地图上是否显示名称"><input type="checkbox" id="showName" checked>名称</label>
       <input type="file" id="fileIn" accept=".kml,.kmz,.gpx,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz,application/gpx+xml" multiple style="display:none">
     </div>
     <div id="list"></div>
@@ -554,6 +559,7 @@ function flatten(n, out){
   return out;
 }
 
+var SHOWNAME = true;   // 地图上是否标名称
 var LAYS = {};      // 文件夹序号 -> 已经画在地图上的图层
 
 function buildLayer(items, depth){
@@ -569,7 +575,7 @@ function buildLayer(items, depth){
       var la=+p[1], ln=+p[0];
       if(isNaN(la)||isNaN(ln)) return;
       var m=L.circleMarker([la,ln],{radius:3.2,color:color,weight:1,fillColor:color,fillOpacity:.85});
-      if(nm && labelled < 800){
+      if(SHOWNAME && nm && labelled < 300){
         m.bindTooltip(nm, {permanent:true, direction:'right', offset:[5,0], className:'ptl'});
         labelled++;
       }
@@ -717,6 +723,27 @@ function clearAll(){
   updateBar();
 }
 document.getElementById('clearAll').onclick=clearAll;
+
+document.getElementById('showName').onchange=function(e){
+  SHOWNAME = e.target.checked;
+  var selNodes = Object.keys(LAYS).map(Number);
+  var selItems = Object.keys(ITEMLAYS).map(function(k){ return k.split(':').map(Number); });
+  for(var k in LAYS){ map.removeLayer(LAYS[k]); }
+  for(var j in ITEMLAYS){ map.removeLayer(ITEMLAYS[j]); }
+  LAYS = {}; ITEMLAYS = {};
+  selNodes.forEach(function(i){
+    var n = nodes[i];
+    if(n){ LAYS[i] = buildLayer(flatten(n, []), n.depth); map.addLayer(LAYS[i]); }
+  });
+  selItems.forEach(function(pr){
+    var n = nodes[pr[0]];
+    if(n && n.items[pr[1]]){
+      ITEMLAYS[pr[0]+':'+pr[1]] = buildLayer([n.items[pr[1]]], n.depth+1);
+      map.addLayer(ITEMLAYS[pr[0]+':'+pr[1]]);
+    }
+  });
+  render();
+};
 document.getElementById('impBtn').onclick=function(){ document.getElementById('fileIn').click(); };
 document.getElementById('fileIn').onchange=function(e){
   if(e.target.files && e.target.files.length) importFiles(e.target.files);
