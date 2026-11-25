@@ -818,25 +818,27 @@ function parseKML(text){
     }
     return out.join(';');
   }
-  function geometry(el){
-    var pt = null, ln = null, pg = null, tr = [];
+  function collect(el){
+    // 一个 Placemark 里可能同时有标注点、多段线、面，全部收下
+    var pts = [], lines = [], polys = [], tr = [];
     var all = el.getElementsByTagName('*');
     for(var i = 0; i < all.length; i++){
       var t = all[i].localName;
-      if(t === 'Point' && !pt) pt = all[i];
-      else if(t === 'LineString' && !ln) ln = all[i];
-      else if(t === 'Polygon' && !pg) pg = all[i];
-      else if(t === 'coord' && all[i].namespaceURI === GXN){
+      if(t === 'Point'){
+        var c1 = coordStr(all[i]); if(c1) pts.push(c1);
+      } else if(t === 'LineString'){
+        var c2 = coordStr(all[i]); if(c2) lines.push(c2);
+      } else if(t === 'Polygon'){
+        var c3 = coordStr(all[i]); if(c3) polys.push(c3);
+      } else if(t === 'coord' && all[i].namespaceURI === GXN){
         var m = (all[i].textContent || '').trim().split(/\s+/);
-        if(m.length >= 2) tr.push(m[0] + ',' + m[1]);
+        if(m.length >= 2 && !isNaN(+m[0]) && !isNaN(+m[1])) tr.push(m[0] + ',' + m[1]);
       }
     }
-    if(tr.length >= 2) return {t:'L', c:tr.join(';')};
-    if(pt){ var c = coordStr(pt); if(c) return {t:'P', c:c}; }
-    if(ln){ var c2 = coordStr(ln); if(c2) return {t:'L', c:c2}; }
-    if(pg){ var c3 = coordStr(pg); if(c3) return {t:'G', c:c3}; }
-    return null;
+    if(tr.length >= 2) lines.unshift(tr.join(';'));
+    return {pts:pts, lines:lines, polys:polys};
   }
+
   function walk(node, path){
     for(var i = 0; i < node.children.length; i++){
       var el = node.children[i], tag = el.localName;
@@ -846,9 +848,17 @@ function parseKML(text){
         walk(el, nm ? path.concat(nm) : path);
       } else if(tag === 'Placemark'){
         var nm2 = childText(el, 'name');
-        var ds = childText(el, 'description');
-        var g = geometry(el);
-        if(g && g.c) items.push({p:path.slice(), n:nm2, d:ds.slice(0, 400), t:g.t, c:g.c});
+        var ds = childText(el, 'description').slice(0, 400);
+        var g = collect(el);
+        g.pts.forEach(function(c){
+          items.push({p:path.slice(), n:nm2, d:ds, t:'P', c:c});
+        });
+        if(g.lines.length){
+          items.push({p:path.slice(), n:nm2, d:ds, t:'L', c:g.lines.join('|')});
+        }
+        if(g.polys.length){
+          items.push({p:path.slice(), n:nm2, d:ds, t:'G', c:g.polys.join('|')});
+        }
       }
     }
   }
