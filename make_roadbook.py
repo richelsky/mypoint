@@ -141,6 +141,8 @@ html,body{margin:0;height:100%;font:13px/1.5 "Microsoft YaHei",system-ui,sans-se
 #tip{position:absolute;left:calc(380px + (100vw - 380px)/2);top:50%;transform:translate(-50%,-50%);
   z-index:500;color:#7f97ad;font-size:13px;text-align:center;line-height:2;pointer-events:none}
 .leaflet-popup-content{font-size:12px;max-height:260px;overflow:auto}
+.ptl{display:none!important}
+#map.zoomed .ptl{display:block!important}
 .ptl{background:rgba(15,23,32,.78)!important;border:0!important;color:#fff!important;
   font-size:10px!important;line-height:1.4!important;padding:0 4px!important;
   border-radius:2px!important;box-shadow:none!important;white-space:nowrap;
@@ -215,6 +217,15 @@ var BASEMAPS = [
 ];
 
 var map = L.map('map',{preferCanvas:true}).setView([33,102],4);
+
+// 名称标签只在 10 级以上显示，缩小了太密
+function syncLabelZoom(){
+  var box = document.getElementById('map');
+  if(!box) return;
+  if(map.getZoom() >= 10) box.classList.add('zoomed');
+  else box.classList.remove('zoomed');
+}
+map.on('zoomend', syncLabelZoom);
 var curBase=[];
 function setBase(i){
   var bm=BASEMAPS[i];
@@ -1094,6 +1105,7 @@ async function boot(){
     initTree();
     render();
     setBase(2);
+    syncLabelZoom();
     updateBar();
     document.getElementById('bar').textContent += '（载入 '+((Date.now()-t0)/1000).toFixed(1)+' 秒）';
   }catch(e){
