@@ -839,13 +839,14 @@ function parseKML(text){
     return {pts:pts, lines:lines, polys:polys};
   }
 
-  function walk(node, path){
+  function walk(node, path, isRoot){
     for(var i = 0; i < node.children.length; i++){
       var el = node.children[i], tag = el.localName;
       if(tag === 'Folder' || tag === 'Document'){
-        // 只认 Folder 的名字，Document 那层（通常是文件名）不占层级
-        var nm = (tag === 'Folder') ? childText(el, 'name') : '';
-        walk(el, nm ? path.concat(nm) : path);
+        // 谷歌地球的 KMZ 里，收藏夹有的存成 Folder、有的存成 Document，
+        // 两种都要算层级；只有最外层那个（通常是文件名）跳过
+        var nm = isRoot ? '' : childText(el, 'name');
+        walk(el, nm ? path.concat(nm) : path, false);
       } else if(tag === 'Placemark'){
         var nm2 = childText(el, 'name');
         var ds = childText(el, 'description').slice(0, 400);
@@ -862,7 +863,7 @@ function parseKML(text){
       }
     }
   }
-  walk(doc.documentElement, []);
+  walk(doc.documentElement, [], true);
   return items;
 }
 
